@@ -1,6 +1,7 @@
 #include "knn.hpp"
 
 #include <math.h>
+#include <stdio.h>
 
 KNN::KNN(
   float **training_set,
@@ -16,12 +17,21 @@ KNN::KNN(
   this->num_classes = num_classes;
 }
 
-float KNN::predict(float *data) {
+float *KNN::predict_many(float **data, int num_points) {
+  float *res = new float[num_points];
+  for (int i = 0; i < num_points; i++) {
+    res[i] = predict_one(data[i]);
+  }
+  return res;
+}
+
+float KNN::predict_one(float *data) {
   int *class_counts = new int[num_classes];
 
   PointDistance *neighbors = find_nearest_neighbors(data);
   for (int i = 0; i < num_neighbors; i++) {
-    class_counts[neighbors[i].index]++;
+    int class_id = neighbors[i].point[0];
+    class_counts[class_id]++;
   }
 
   int max_index = 0;
@@ -43,8 +53,8 @@ PointDistance* KNN::find_nearest_neighbors(float *data) {
     float *training_point = training_set[i];
     PointDistance pd = {
       .index = i,
-      .distance = distance(data, training_point),
       .point = training_point,
+      .distance = distance(data, training_point),
     };
     neighbors[i] = pd;
   }
@@ -54,8 +64,8 @@ PointDistance* KNN::find_nearest_neighbors(float *data) {
     float *training_point = training_set[i];
     PointDistance pd = {
       .index = i,
-      .distance = distance(data, training_point),
       .point = training_point,
+      .distance = distance(data, training_point),
     };
     insert(neighbors, pd);
   }
@@ -82,7 +92,7 @@ void KNN::insert(PointDistance *arr, PointDistance pd) {
  */
 float KNN::distance(float *x, float *y) {
   float sum = 0;
-  for (int i = 0; i < point_size; i++) {
+  for (int i = 1; i < point_size; i++) {
     sum += pow(x[i] - y[i], 2);
   }
   return sqrt(sum);

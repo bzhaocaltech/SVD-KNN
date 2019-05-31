@@ -20,11 +20,12 @@ public:
     int num_neighbors,
     int num_classes
   );
+  float *predict_many(float **data, int num_points);
   /**
    * Takes a data point, finds the k-nearest-neighbors, then returns the most
    * likely classification.
    */
-  float predict(float *data);
+  float predict_one(float *data);
 private:
   /**
    * The data that this KNN model trains on.
