@@ -1,16 +1,13 @@
 CXX = g++
 CXXFLAGS = -std=c++14 -Wall -g
 
-all: run_model run_knn
+all: run_svd run_knn
 
 run_knn: run_knn.o knn/knn.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-run_model: run_model.o svd/svd.o
-	$(CXX) $(CXXFLAGS) $^ -o run_model
-
-run_model.o: run_model.cpp
-	$(CXX) $(CXXFLAGS) -c run_model.cpp
+run_svd: run_svd.o svd/svd.o
+	$(CXX) $(CXXFLAGS) $^ -o run_svd
 
 clean:
-	rm -f run_model run_knn *.o svd/*.o knn/*.o
+	rm -f run_svd run_knn *.o svd/*.o knn/*.o

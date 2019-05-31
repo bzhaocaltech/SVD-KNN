@@ -1,5 +1,5 @@
 .vscode/
 data/
-run_model
+run_svd
 run_knn
 *.o
