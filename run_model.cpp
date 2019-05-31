@@ -74,7 +74,7 @@ int main() {
   int num_movies = 17770;
   int num_users = 2649429;
   int num_epochs = 10;
-  float eta = 0.001
+  float eta = 0.001;
 
   auto start_time = std::chrono::high_resolution_clock::now();
 

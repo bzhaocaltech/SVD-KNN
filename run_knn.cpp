@@ -4,6 +4,8 @@
 #include <fstream>
 #include <vector>
 #include <assert.h>
+#include <chrono>
+#include <iostream>
 #include "knn/knn.hpp"
 
 void read_data(float **training_set, std::fstream *file_fstream);
@@ -41,7 +43,7 @@ int main() {
 
   input_stream2.open("data/test_data.csv", std::ios::in | std::ios::binary);
 
-  int num_test_points = 10;
+  int num_test_points = 1000;
   fprintf(stderr, "Loading test_data.csv");
   float **test_set = new float *[num_test_points];
   read_data(test_set, &input_stream2);
@@ -49,11 +51,34 @@ int main() {
 
   input_stream2.close();
 
+  /****************************************************************************
+   * Running model                                                            *
+  *****************************************************************************/
+
+  auto start_time = std::chrono::high_resolution_clock::now();
+
+  fprintf(stderr, "Predicting on test set");
   float *res = knn->predict_many(test_set, num_test_points);
+  float hits = 0;
   for (int i = 0; i < num_test_points; i++) {
-    printf("%f, ", res[i]);
+    if (res[i] != test_set[i][0]) {
+      hits++;
+    }
   }
-  printf("\n");
+  fprintf(stderr, "\n");
+
+  std::cerr << "Accuracy: " << hits / num_test_points << std::endl;
+
+  auto end_time = std::chrono::high_resolution_clock::now();
+
+  auto duration =
+    std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+
+  std::cerr << "Time taken: " << duration.count() << " milliseconds" << std::endl;
+
+  /****************************************************************************
+   * Freeing model                                                            *
+  *****************************************************************************/
 
   // Free the dataset
   for (int i = 0; i < num_training_points; i++) {
@@ -79,7 +104,7 @@ void read_data(float **training_set, std::fstream *file_fstream) {
   {
     // Print out a dot occasionally so that we know it's actually doing
     // something and not broken
-    if (line_num % 10000 == 0)
+    if (line_num % 100000 == 0)
     {
       fprintf(stderr, ".");
     }

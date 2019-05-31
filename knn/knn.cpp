@@ -20,6 +20,10 @@ KNN::KNN(
 float *KNN::predict_many(float **data, int num_points) {
   float *res = new float[num_points];
   for (int i = 0; i < num_points; i++) {
+    if (i % 20 == 0) {
+      fprintf(stderr, ".");
+    }
+
     res[i] = predict_one(data[i]);
   }
   return res;
@@ -49,7 +53,7 @@ float KNN::predict_one(float *data) {
 
 PointDistance* KNN::find_nearest_neighbors(float *data) {
   PointDistance *neighbors = new PointDistance[num_neighbors];
-  
+
   // Fill `neighbors` with the first `num_neighbors` points from the training
   // set.
   for (int i = 0; i < num_neighbors; i++) {
