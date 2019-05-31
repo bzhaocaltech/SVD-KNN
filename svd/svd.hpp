@@ -1,6 +1,8 @@
 #ifndef SVD_HPP
 #define SVD_HPP
 
+#include <stdlib.h>
+
 class SVD {
   private:
     // Number of latent factors.
@@ -49,8 +51,10 @@ class SVD {
     SVD(int latent_factors, float eta, int len_x, int len_y);
 
     /* Train on a dataset. Each element of the input array has 3 elements.
-     * (x, y, val). Note that x and y are technically ints */
-    void train(float** train, int size, int num_epochs);
+     * (x, y, val). Note that x and y are technically ints. Includes optional
+     * argument for validation set */
+    void train(float** train, int size, int num_epochs,
+      float** valid = NULL, int valid_size = 0);
 
     /* Predicts the values of a dataset. Each element of the input array has
      * 2 elements (x, y). Returns the predicted values in the order that they

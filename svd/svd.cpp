@@ -1,5 +1,4 @@
 #include "svd.hpp"
-#include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
 
@@ -73,7 +72,8 @@ float SVD::predict_one(int x, int y) {
   return predicted;
 }
 
-void SVD::train(float** train, int size, int num_epochs) {
+void SVD::train(float** train, int size, int num_epochs,
+  float** valid, int valid_size) {
   for (int epoch_num = 0; epoch_num < num_epochs; epoch_num++) {
     fprintf(stderr, "Running epoch %d", epoch_num);
     // MSE error
@@ -106,7 +106,20 @@ void SVD::train(float** train, int size, int num_epochs) {
       }
     }
     fprintf(stderr, "\n");
-    fprintf(stderr, "Error for epoch: %f\n", total_error / (float) size);
+    fprintf(stderr, "Training error for epoch: %f\n", total_error / (float) size);
+
+    // Error for validation set
+    if (valid != NULL) {
+      float valid_error = 0;
+      for (int i = 0; i < valid_size; i++) {
+        int x = valid[i][0];
+        int y = valid[i][1];
+        float actual = valid[i][2];
+        float predicted = predict_one(x, y);
+        valid_error += (predicted - actual) * (predicted - actual);
+      }
+      fprintf(stderr, "Validation error for epoch: %f\n", valid_error / (float) valid_size);
+    }
   }
 }
 

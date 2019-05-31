@@ -4,9 +4,12 @@
 #include <fstream>
 #include <vector>
 #include <assert.h>
+#include <chrono>
+#include <iostream>
 #include "svd/svd.hpp"
 
-void read_data_into_vector(std::vector<int*>* vec, std::fstream* file_fstream);
+void read_data_into_vector(std::vector<int*>* train_vec,
+  std::vector<int*>* valid_vec, std::fstream* file_fstream);
 void read_vector_into_array(float** arr, std::vector<int*>* vec);
 
 int main() {
@@ -28,18 +31,19 @@ int main() {
   input_stream_4.open("data/combined_data_4.txt", std::ios::in | std::ios::binary);
 
   // Read data into std::vector
-  std::vector<int*>* vec = new std::vector<int*>();
+  std::vector<int*>* train_vec = new std::vector<int*>();
+  std::vector<int*>* valid_vec = new std::vector<int*>();
   fprintf(stderr, "Loading combined_data_1.txt");
-  read_data_into_vector(vec, &input_stream_1);
+  read_data_into_vector(train_vec, valid_vec, &input_stream_1);
   fprintf(stderr, "\n");
   fprintf(stderr, "Loading combined_data_2.txt");
-  read_data_into_vector(vec, &input_stream_2);
+  read_data_into_vector(train_vec, valid_vec, &input_stream_2);
   fprintf(stderr, "\n");
   fprintf(stderr, "Loading combined_data_3.txt");
-  read_data_into_vector(vec, &input_stream_3);
+  read_data_into_vector(train_vec, valid_vec, &input_stream_3);
   fprintf(stderr, "\n");
   fprintf(stderr, "Loading combined_data_4.txt");
-  read_data_into_vector(vec, &input_stream_4);
+  read_data_into_vector(train_vec, valid_vec, &input_stream_4);
   fprintf(stderr, "\n");
 
   // Close the files
@@ -49,30 +53,52 @@ int main() {
   input_stream_4.close();
 
   // Convert std::vector into array
-  int num_points = vec->size();
-  float** dataset = new float*[num_points];
-  fprintf(stderr, "There are %d points\n", num_points);
+  int num_train_points = train_vec->size();
+  int num_valid_points = valid_vec->size();
+  float** train_set = new float*[num_train_points];
+  float** valid_set = new float*[num_valid_points];
+  fprintf(stderr, "There are %d points in the training set\n", num_train_points);
+  fprintf(stderr, "There are %d points in the validation set\n", num_valid_points);
   fprintf(stderr, "Converting from vector to array");
-  read_vector_into_array(dataset, vec);
+  read_vector_into_array(train_set, train_vec);
+  read_vector_into_array(valid_set, valid_vec);
   fprintf(stderr, "\n");
-  free(vec);
+  free(train_vec);
+  free(valid_vec);
 
   // This is from data/README
   int num_movies = 17770;
   int num_users = 2649429;
+  int num_epochs = 10;
+
+  auto start_time = std::chrono::high_resolution_clock::now();
 
   SVD* svd = new SVD(10, 0.001, num_movies, num_users);
-  svd->train(dataset, num_points, 10);
+  svd->train(train_set, num_train_points, num_epochs, valid_set, num_valid_points);
 
-  // Free the dataset
-  for (int i = 0; i < num_points; i++) {
-    free(dataset[i]);
+  auto end_time = std::chrono::high_resolution_clock::now();
+
+  auto duration =
+    std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+
+  std::cerr << "Time taken: " << duration.count() << " milliseconds" << std::endl;
+
+  // Free the datasets
+  for (int i = 0; i < num_train_points; i++) {
+    free(train_set[i]);
   }
-  free(dataset);
+  for (int i = 0; i < num_valid_points; i++) {
+    free(valid_set[i]);
+  }
+  free(train_set);
+  free(valid_set);
+
+  return 0;
 }
 
-// Load data from given fstream into vector
-void read_data_into_vector(std::vector<int*>* vec, std::fstream* file_fstream) {
+// Load data from given fstream into two vectors, training and validation sets
+void read_data_into_vector(std::vector<int*>* train_vec,
+  std::vector<int*>* valid_vec, std::fstream* file_fstream) {
   std::string line;
   int movie_id;
   int line_num = 0;
@@ -90,10 +116,10 @@ void read_data_into_vector(std::vector<int*>* vec, std::fstream* file_fstream) {
     // If the line does not contain a colon, it represents a data point
     else if ((int) line.find(":") == -1) {
       // Get user id
-      int user_id = atoi(line.substr(0, line.find(' ')).c_str()) - 1;
+      int user_id = atoi(line.substr(0, line.find(',')).c_str()) - 1;
       line = line.substr(line.find(',') + 1);
       // Get rating
-      int rating = atoi(line.substr(0, line.find(' ')).c_str());
+      int rating = atoi(line.substr(0, line.find(',')).c_str());
       line = line.substr(line.find(',') + 1);
       // Discard time for now
 
@@ -102,7 +128,14 @@ void read_data_into_vector(std::vector<int*>* vec, std::fstream* file_fstream) {
       point[0] = movie_id;
       point[1] = user_id;
       point[2] = rating;
-      vec->push_back(point);
+
+      // Add every 100th point to the validation set
+      if (line_num % 100 == 0) {
+        valid_vec->push_back(point);
+      }
+      else {
+        train_vec->push_back(point);
+      }
     }
     // Unknown format for line
     else {
