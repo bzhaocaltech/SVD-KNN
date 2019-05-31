@@ -66,14 +66,19 @@ int main() {
   free(train_vec);
   free(valid_vec);
 
+  /****************************************************************************
+   * Running SVD code                                                         *
+  *****************************************************************************/
+
   // This is from data/README
   int num_movies = 17770;
   int num_users = 2649429;
   int num_epochs = 10;
+  float eta = 0.001
 
   auto start_time = std::chrono::high_resolution_clock::now();
 
-  SVD* svd = new SVD(10, 0.001, num_movies, num_users);
+  SVD* svd = new SVD(10, eta, num_movies, num_users);
   svd->train(train_set, num_train_points, num_epochs, valid_set, num_valid_points);
 
   auto end_time = std::chrono::high_resolution_clock::now();
@@ -82,6 +87,10 @@ int main() {
     std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
   std::cerr << "Time taken: " << duration.count() << " milliseconds" << std::endl;
+
+  /****************************************************************************
+   * Free memory                                                              *
+  *****************************************************************************/
 
   // Free the datasets
   for (int i = 0; i < num_train_points; i++) {

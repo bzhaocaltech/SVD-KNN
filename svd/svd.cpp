@@ -12,6 +12,14 @@ SVD::SVD(int latent_factors, float eta, int len_x, int len_y) {
   this->U = (float*) calloc(latent_factors * len_x, sizeof(float));
   this->V = (float*) calloc(latent_factors * len_y, sizeof(float));
 
+  // Initialize U and V to 0.5 arbitrarily
+  for (int i = 0; i < latent_factors * len_x; i++) {
+    this->U[i] = 0.5;
+  }
+  for (int i = 0; i < latent_factors * len_y; i++) {
+    this->V[i] = 0.5;
+  }
+
   this->a = (float*) calloc(len_x, sizeof(float));
   this->b = (float*) calloc(len_y, sizeof(float));
   this->mu = 0;
@@ -98,8 +106,8 @@ void SVD::train(float** train, int size, int num_epochs,
       mu -= eta * error;
       // Adjust U and V
       for (int j = 0; j < latent_factors; j++) {
-        float u_grad = error * get_v_val(y, j);
-        float v_grad = error * get_u_val(x, j);
+        float u_grad = eta * error * get_v_val(y, j);
+        float v_grad = eta * error * get_u_val(x, j);
 
         set_u_val(x, j, get_u_val(x, j) - u_grad);
         set_v_val(y, j, get_v_val(y, j) - v_grad);

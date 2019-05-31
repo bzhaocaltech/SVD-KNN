@@ -10,4 +10,4 @@ run_model.o: run_model.cpp
 	$(CXX) $(CXXFLAGS) -c run_model.cpp
 
 clean:
-	rm -f run_model *.o
+	rm -f run_model *.o svd/*.o
