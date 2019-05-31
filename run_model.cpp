@@ -4,6 +4,7 @@
 #include <fstream>
 #include <vector>
 #include <assert.h>
+#include "svd/svd.hpp"
 
 void read_data_into_vector(std::vector<int*>* vec, std::fstream* file_fstream);
 void read_vector_into_array(float** arr, std::vector<int*>* vec);
@@ -56,6 +57,13 @@ int main() {
   fprintf(stderr, "\n");
   free(vec);
 
+  // This is from data/README
+  int num_movies = 17770;
+  int num_users = 2649429;
+
+  SVD* svd = new SVD(10, 0.001, num_movies, num_users);
+  svd->train(dataset, num_points, 10);
+
   // Free the dataset
   for (int i = 0; i < num_points; i++) {
     free(dataset[i]);
@@ -77,12 +85,12 @@ void read_data_into_vector(std::vector<int*>* vec, std::fstream* file_fstream) {
 
     // If the last line ends in colon, update the movie id
     if (line.find(":") == line.length() - 1) {
-      movie_id = atoi(line.substr(0, line.find(":")).c_str());
+      movie_id = atoi(line.substr(0, line.find(":")).c_str()) - 1;
     }
     // If the line does not contain a colon, it represents a data point
     else if ((int) line.find(":") == -1) {
       // Get user id
-      int user_id = atoi(line.substr(0, line.find(' ')).c_str());
+      int user_id = atoi(line.substr(0, line.find(' ')).c_str()) - 1;
       line = line.substr(line.find(',') + 1);
       // Get rating
       int rating = atoi(line.substr(0, line.find(' ')).c_str());
