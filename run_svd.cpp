@@ -73,12 +73,13 @@ int main() {
   // This is from data/README
   int num_movies = 17770;
   int num_users = 2649429;
-  int num_epochs = 10;
+  int num_epochs = 5;
   float eta = 0.001;
+  float reg = 0.0005;
 
   auto start_time = std::chrono::high_resolution_clock::now();
 
-  SVD* svd = new SVD(10, eta, num_movies, num_users);
+  SVD* svd = new SVD(10, eta, reg, num_movies, num_users);
   svd->train(train_set, num_train_points, num_epochs, valid_set, num_valid_points);
 
   auto end_time = std::chrono::high_resolution_clock::now();

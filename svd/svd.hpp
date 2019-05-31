@@ -48,7 +48,7 @@ class SVD {
 
   public:
     /* Constructor for SVD */
-    SVD(int latent_factors, float eta, int len_x, int len_y);
+    SVD(int latent_factors, float eta, float reg, int len_x, int len_y);
 
     /* Train on a dataset. Each element of the input array has 3 elements.
      * (x, y, val). Note that x and y are technically ints. Includes optional

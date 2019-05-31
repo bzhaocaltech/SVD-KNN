@@ -3,9 +3,10 @@
 #include <stdio.h>
 
 /* Constructor for SVD */
-SVD::SVD(int latent_factors, float eta, int len_x, int len_y) {
+SVD::SVD(int latent_factors, float eta, float reg, int len_x, int len_y) {
   this->latent_factors = latent_factors;
   this->eta = eta;
+  this->reg = reg;
   this->len_x = len_x;
   this->len_y = len_y;
 
@@ -99,15 +100,15 @@ void SVD::train(float** train, int size, int num_epochs,
       total_error += error * error;
 
       // Adjust a
-      a[x] -= eta * error;
+      a[x] -= eta * (error - reg * a[x]);
       // Adjust b
-      b[y] -= eta * error;
+      b[y] -= eta * (error - reg * b[y]);
       // Adjust mu
-      mu -= eta * error;
+      mu -= eta * (error - reg * mu);
       // Adjust U and V
       for (int j = 0; j < latent_factors; j++) {
-        float u_grad = eta * error * get_v_val(y, j);
-        float v_grad = eta * error * get_u_val(x, j);
+        float u_grad = eta * (error * get_v_val(y, j) - reg * get_u_val(x, j));
+        float v_grad = eta * (error * get_u_val(x, j) - reg * get_v_val(y, j));
 
         set_u_val(x, j, get_u_val(x, j) - u_grad);
         set_v_val(y, j, get_v_val(y, j) - v_grad);
