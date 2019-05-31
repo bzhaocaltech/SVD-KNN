@@ -13,4 +13,4 @@ run_model.o: run_model.cpp
 	$(CXX) $(CXXFLAGS) -c run_model.cpp
 
 clean:
-	rm -f run_model *.o svd/*.o
+	rm -f run_model run_knn *.o svd/*.o knn/*.o

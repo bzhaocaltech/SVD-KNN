@@ -27,6 +27,9 @@ float *KNN::predict_many(float **data, int num_points) {
 
 float KNN::predict_one(float *data) {
   int *class_counts = new int[num_classes];
+  for (int i = 0; i < num_classes; i++) {
+    class_counts[i] = 0;
+  }
 
   PointDistance *neighbors = find_nearest_neighbors(data);
   for (int i = 0; i < num_neighbors; i++) {

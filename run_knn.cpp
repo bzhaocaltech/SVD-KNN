@@ -49,11 +49,11 @@ int main() {
 
   input_stream2.close();
 
-  // float *res = knn->predict_many(test_set, num_test_points);
-  // for (int i = 0; i < num_test_points; i++) {
-  //   printf("%f", res[i]);
-  // }
-  // printf("\n");
+  float *res = knn->predict_many(test_set, num_test_points);
+  for (int i = 0; i < num_test_points; i++) {
+    printf("%f, ", res[i]);
+  }
+  printf("\n");
 
   // Free the dataset
   for (int i = 0; i < num_training_points; i++) {
@@ -62,11 +62,11 @@ int main() {
 
   free(training_set);
 
-  // for (int i = 0; i < num_test_points; i++) {
-  //   free(test_set[i]);
-  // }
+  for (int i = 0; i < num_test_points; i++) {
+    free(test_set[i]);
+  }
 
-  // free(test_set);
+  free(test_set);
 
   return 0;
 }
