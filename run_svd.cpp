@@ -7,6 +7,7 @@
 #include <chrono>
 #include <iostream>
 #include <cuda_runtime.h>
+#include "helper_cuda.h"
 #include "svd/svd.hpp"
 #include "svd/gpu_svd.cuh"
 
@@ -59,8 +60,8 @@ int main() {
   int num_valid_points = valid_vec->size();
   // Each point has 3 dimensions (x_index, y_index, value) where x_index and
   // y_index are positions in the matrix
-  float* train_set = new float[num_train_points * 3];
-  float* valid_set = new float[num_valid_points * 3];
+  float* train_set = (float*) malloc(sizeof(float) * num_train_points * 3);
+  float* valid_set =(float*) malloc(sizeof(float) * num_valid_points * 3);
   fprintf(stderr, "There are %d points in the training set\n", num_train_points);
   fprintf(stderr, "There are %d points in the validation set\n", num_valid_points);
   fprintf(stderr, "Converting from vector to array");
@@ -73,27 +74,49 @@ int main() {
   /****************************************************************************
    * Running SVD code                                                         *
   *****************************************************************************/
-
   fprintf(stderr, "Finished loading data. Now running CPU code.\n");
 
   // This is from data/README
   int num_movies = 17770;
   int num_users = 2649429;
-  int num_epochs = 5;
+  int num_epochs = 2;
+  int latent_factors = 10;
   float eta = 0.001;
   float reg = 0.0005;
 
-  auto start_time = std::chrono::high_resolution_clock::now();
+  // auto start_time = std::chrono::high_resolution_clock::now();
+  //
+  // SVD* svd = new SVD(latent_factors, eta, reg, num_movies, num_users);
+  // svd->train(train_set, num_train_points, num_epochs, valid_set, num_valid_points);
+  //
+  // auto end_time = std::chrono::high_resolution_clock::now();
+  //
+  // auto duration =
+  //   std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+  //
+  // std::cerr << "Time taken: " << duration.count() << " milliseconds" << std::endl;
 
-  SVD* svd = new SVD(10, eta, reg, num_movies, num_users);
-  svd->train(train_set, num_train_points, num_epochs, valid_set, num_valid_points);
+  /****************************************************************************
+   * Running GPU code                                                         *
+   ****************************************************************************/
+  fprintf(stderr, "Finished CPU code. Now running GPU code.\n");
 
-  auto end_time = std::chrono::high_resolution_clock::now();
+  // Copy the training and validation sets onto device memory
+  float* dev_train_set;
+  float* dev_valid_set;
 
-  auto duration =
-    std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+  CUDA_CALL(cudaMalloc(&dev_train_set, 3 * num_train_points * sizeof(float)));
+  CUDA_CALL(cudaMalloc(&dev_valid_set, 3 * num_valid_points * sizeof(float)));
+  CUDA_CALL(cudaMemcpy(dev_train_set, train_set,
+    3 * num_train_points * sizeof(float), cudaMemcpyHostToDevice));
+  CUDA_CALL(cudaMemcpy(dev_valid_set, valid_set,
+    3 * num_valid_points * sizeof(float), cudaMemcpyHostToDevice));
 
-  std::cerr << "Time taken: " << duration.count() << " milliseconds" << std::endl;
+  GPU_SVD* gpu_svd = createGPUSVD(latent_factors, eta, reg, num_movies, num_users);
+  callSVDTrainKernel(32, 32, gpu_svd, dev_train_set, num_train_points, num_epochs,
+    dev_valid_set, num_valid_points);
+
+  freeGPUSVD(gpu_svd);
 
   /****************************************************************************
    * Free memory                                                              *
@@ -102,6 +125,8 @@ int main() {
   // Free the datasets (the vectors were freed earlier)
   free(train_set);
   free(valid_set);
+  CUDA_CALL(cudaFree(dev_train_set));
+  CUDA_CALL(cudaFree(dev_valid_set));
 
   return 0;
 }
