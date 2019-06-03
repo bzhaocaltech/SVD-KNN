@@ -78,11 +78,11 @@ run_knn.cpp.o: run_knn.cpp
 %_svd.cu.o: svd/%_svd.cu
 	$(NVCC) $(NVCC_FLAGS) $(NVCC_GENCODES) -c -o $@ $(NVCC_INCLUDE) $<
 
-cuda: $(SVD_CUDA_FILES) $(CUDA_OBJ)
+cuda: $(SVD_CUDA_OBJ_FILES) $(CUDA_OBJ)
 
 # Make linked device code
 $(CUDA_OBJ): $(SVD_CUDA_OBJ_FILES)
 	$(NVCC) $(CUDA_LINK_FLAGS) $(NVCC_GENCODES) -o $@ $(NVCC_INCLUDE) $^
 
 clean:
-	rm -f run_svd run_knn *.o svd/*.o knn/*.o
+	rm -f run_svd run_knn *.o *~ svd/*.o knn/*.o svd/*~ knn/*~
