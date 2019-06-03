@@ -81,20 +81,20 @@ float SVD::predict_one(int x, int y) {
   return predicted;
 }
 
-void SVD::train(float** train, int size, int num_epochs,
-  float** valid, int valid_size) {
+void SVD::train(float* train, int size, int num_epochs,
+  float* valid, int valid_size) {
   for (int epoch_num = 0; epoch_num < num_epochs; epoch_num++) {
     fprintf(stderr, "Running epoch %d", epoch_num);
     // MSE error
     float total_error = 0;
-    for (int i = 0; i < size; i++) {
+    for (int i = 0; i < size * 3; i += 3) {
       if (i % 1000000 == 0) {
         fprintf(stderr, ".");
       }
 
-      int x = train[i][0];
-      int y = train[i][1];
-      float actual = train[i][2];
+      int x = train[i];
+      int y = train[i + 1];
+      float actual = train[i + 2];
       float predicted = predict_one(x, y);
       float error = predicted - actual;
       total_error += error * error;
@@ -120,10 +120,10 @@ void SVD::train(float** train, int size, int num_epochs,
     // Error for validation set
     if (valid != NULL) {
       float valid_error = 0;
-      for (int i = 0; i < valid_size; i++) {
-        int x = valid[i][0];
-        int y = valid[i][1];
-        float actual = valid[i][2];
+      for (int i = 0; i < valid_size * 3; i += 3) {
+        int x = valid[i];
+        int y = valid[i + 1];
+        float actual = valid[i + 2];
         float predicted = predict_one(x, y);
         valid_error += (predicted - actual) * (predicted - actual);
       }

@@ -10,7 +10,7 @@
 
 void read_data_into_vector(std::vector<int*>* train_vec,
   std::vector<int*>* valid_vec, std::fstream* file_fstream);
-void read_vector_into_array(float** arr, std::vector<int*>* vec);
+void read_vector_into_array(float* arr, std::vector<int*>* vec);
 
 int main() {
   /****************************************************************************
@@ -55,8 +55,10 @@ int main() {
   // Convert std::vector into array
   int num_train_points = train_vec->size();
   int num_valid_points = valid_vec->size();
-  float** train_set = new float*[num_train_points];
-  float** valid_set = new float*[num_valid_points];
+  // Each point has 3 dimensions (x_index, y_index, value) where x_index and
+  // y_index are positions in the matrix
+  float* train_set = new float[num_train_points * 3];
+  float* valid_set = new float[num_valid_points * 3];
   fprintf(stderr, "There are %d points in the training set\n", num_train_points);
   fprintf(stderr, "There are %d points in the validation set\n", num_valid_points);
   fprintf(stderr, "Converting from vector to array");
@@ -69,6 +71,8 @@ int main() {
   /****************************************************************************
    * Running SVD code                                                         *
   *****************************************************************************/
+
+  fprintf(stderr, "Finished loading data. Now running CPU code.\n");
 
   // This is from data/README
   int num_movies = 17770;
@@ -93,13 +97,7 @@ int main() {
    * Free memory                                                              *
   *****************************************************************************/
 
-  // Free the datasets
-  for (int i = 0; i < num_train_points; i++) {
-    free(train_set[i]);
-  }
-  for (int i = 0; i < num_valid_points; i++) {
-    free(valid_set[i]);
-  }
+  // Free the datasets (the vectors were freed earlier)
   free(train_set);
   free(valid_set);
 
@@ -158,8 +156,8 @@ void read_data_into_vector(std::vector<int*>* train_vec,
   }
 }
 
-// Load data from given vector into float**. Also frees the vector
-void read_vector_into_array(float** arr, std::vector<int*>* vec) {
+// Load data from given vector into float*. Also frees the vector
+void read_vector_into_array(float* arr, std::vector<int*>* vec) {
   for (unsigned int i = 0; i < vec->size(); i++) {
     // Print out a dot occasionally so that we know it's actually doing
     // something and not broken
@@ -167,10 +165,9 @@ void read_vector_into_array(float** arr, std::vector<int*>* vec) {
       fprintf(stderr, ".");
     }
 
-    arr[i] = new float[3];
-    arr[i][0] = vec->at(i)[0];
-    arr[i][1] = vec->at(i)[1];
-    arr[i][2] = vec->at(i)[2];
+    arr[3 * i] = vec->at(i)[0];
+    arr[3 * i + 1] = vec->at(i)[1];
+    arr[3 * i + 2] = vec->at(i)[2];
     free(vec->at(i));
   }
 }
