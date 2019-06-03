@@ -6,7 +6,9 @@
 #include <assert.h>
 #include <chrono>
 #include <iostream>
+#include <cuda_runtime.h>
 #include "svd/svd.hpp"
+#include "svd/gpu_svd.cuh"
 
 void read_data_into_vector(std::vector<int*>* train_vec,
   std::vector<int*>* valid_vec, std::fstream* file_fstream);
