@@ -71,12 +71,12 @@ float SVD::predict_one(int x, int y) {
   float predicted = 0;
   for (int j = 0; j < latent_factors; j++) {
     predicted += get_u_val(x, j) * get_v_val(y, j);
-
-    // Add biases
-    predicted += a[x];
-    predicted += b[y];
-    predicted += mu;
   }
+
+  // Add biases
+  predicted += a[x];
+  predicted += b[y];
+  predicted += mu;
 
   return predicted;
 }

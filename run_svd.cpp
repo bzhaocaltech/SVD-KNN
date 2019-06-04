@@ -113,7 +113,7 @@ int main() {
     3 * num_valid_points * sizeof(float), cudaMemcpyHostToDevice));
 
   GPU_SVD* gpu_svd = createGPUSVD(latent_factors, eta, reg, num_movies, num_users);
-  callSVDTrainKernel(32, 32, gpu_svd, dev_train_set, num_train_points, num_epochs,
+  callSVDTrainKernel(64, 32, gpu_svd, dev_train_set, num_train_points, num_epochs,
     dev_valid_set, num_valid_points);
 
   freeGPUSVD(gpu_svd);

@@ -28,7 +28,7 @@ GPU_SVD* createGPUSVD(int latent_factors, float eta, float reg, int len_x,
   }
   CUDA_CALL(cudaMemcpy(svd->U, temp_u, latent_factors * len_x * sizeof(float),
     cudaMemcpyHostToDevice));
-  CUDA_CALL(cudaMemcpy(svd->V, temp_v, latent_factors * len_x * sizeof(float),
+  CUDA_CALL(cudaMemcpy(svd->V, temp_v, latent_factors * len_y * sizeof(float),
     cudaMemcpyHostToDevice));
 
   // Initialize biases
@@ -57,21 +57,26 @@ void freeGPUSVD(GPU_SVD* svd) {
 
 __global__ void SVDTrainKernel(int latent_factors, float* U, float* V, float* a,
   float* b, float* mu, float eta, float reg, const float* train, int size,
-  const float* valid, int valid_size,
-  float* train_epoch_error) {
+  const float* valid, int valid_size, float* train_epoch_error) {
 
   // Initialize shared memory
+  // Shared memory contains 3 subarrays: (0 - blockDim.x is used for dot
+  // product calculation; blockDim.x - (blockDim.x + latent_factors) is used
+  // for copying U; (blockDim.x + latent_factors) + (blockDim.x +
+  // latent_factors * 2) is used for copying V)
   extern __shared__ float shared[];
 
   // Total error for the epoch in just this block
-  float total_error;
+  float total_error = 0;
+
+  // Offsets in shared memory
+  uint offsetUShared = blockDim.x;
+  uint offsetVShared = blockDim.x + latent_factors;
 
   // Each individual block deals with a single training example. Train_index is
   // the current index of train being processed by this block.
-  uint train_index = blockIdx.x;
+  uint train_index = blockIdx.x * 3;
   while (train_index < size) {
-    train_index += gridDim.x;
-
     // Extract out necessary variables from the training data
     int x = train[train_index];
     int y = train[train_index + 1];
@@ -81,15 +86,19 @@ __global__ void SVDTrainKernel(int latent_factors, float* U, float* V, float* a,
     int v_row = y * latent_factors;
 
     // Now get the predicted value at x, y. To do this, load up shared memory
-    // with part of the dot product
+    // with part of the dot product. We can also use the loop to set up the
+    // parts of the shared memory which will just be copies of U and V
     uint row_index = threadIdx.x;
     float dot_part = 0;
     while (row_index < latent_factors) {
-      dot_part += U[u_row + row_index] * V[v_row + row_index];
+      float uval = U[u_row + row_index];
+      float vval = V[v_row + row_index];
+      shared[offsetUShared + row_index] = uval;
+      shared[offsetVShared + row_index] = vval;
+      dot_part += uval * vval;
       row_index += blockDim.x;
     }
     shared[threadIdx.x] = dot_part;
-    printf("%f %f %f\n", shared[0], U[u_row + row_index], V[v_row + row_index]);
 
     // After everything is loaded into shared memory, sync the threads
     __syncthreads();
@@ -108,9 +117,12 @@ __global__ void SVDTrainKernel(int latent_factors, float* U, float* V, float* a,
 
     // We can now add the biases to find the predicted value given by our
     // algorithm
-    float predicted = shared[0] + a[x] + b[y] + *mu;
+    float ax = a[x];
+    float by = b[y];
+    float m = *mu;
+    float predicted = shared[0] + ax + by + m;
 
-    float error = actual - predicted;
+    float error = predicted - actual;
     total_error += (error * error);
 
     // Now comes the "hogwild" part. This results in race conditions between
@@ -120,27 +132,44 @@ __global__ void SVDTrainKernel(int latent_factors, float* U, float* V, float* a,
     // NOTE: This is done in coalesced manner
     row_index = threadIdx.x;
     while (row_index < latent_factors) {
-      float old_u = U[u_row + row_index];
-      float old_v = V[u_row + row_index];
+      float old_u = shared[offsetUShared + row_index];
+      float old_v = shared[offsetVShared + row_index];
       float u_error_grad = eta * error * old_v;
-      float u_reg_grad = eta * reg * old_u;
       float v_error_grad = eta * error * old_u;
+      // u_error_grad = 0;
+      // v_error_grad = 0;
+      float u_reg_grad = eta * reg * old_u;
       float v_reg_grad = eta * reg * old_v;
-      U[u_row + row_index] = old_u - u_error_grad + u_reg_grad;
-      V[v_row + row_index] = old_v - v_error_grad + v_reg_grad;
+      // float u_reg_grad = 0;
+      // float v_reg_grad = 0;
+      U[u_row + row_index] = old_u - u_error_grad - u_reg_grad;
+      V[v_row + row_index] = old_v - v_error_grad - v_reg_grad;
       row_index += blockDim.x;
     }
 
+    __syncthreads();
+
     // Only one thread need adjust a, b and mu.
     if (threadIdx.x == 0) {
-      a[x] -= eta * (error - reg * a[x]);
-      b[y] -= eta * (error - reg * b[y]);
-      *mu -= eta * (error - reg * *mu);
+      a[x] = ax - eta * (error + reg * ax);
+      b[y] = by - eta * (error + reg * by);
+      *mu = m - eta * (error + reg * m);
+
+      // printf("%f %f %f %f\n", error, reg, a[x], b[y]);
     }
+
+    // Move onto to the next training sample
+    train_index += 3 * gridDim.x;
+
+    // The next loop will change shared memory, so make sure all threads are
+    // done before moving on
+
+    __syncthreads();
   }
 
   // Have only a single thread per block report the error in the block
   if (threadIdx.x == 0) {
+    printf("%f\n", total_error);
     atomicAdd(train_epoch_error, total_error);
   }
 }
@@ -150,18 +179,36 @@ void callSVDTrainKernel(unsigned int blocks, unsigned int threadsPerBlock,
   const float* valid, int valid_size) {
 
   // Use the keep track of the entire error per epoch
-  float train_epoch_error = 0;
+  float* train_epoch_error;
+  CUDA_CALL(cudaMalloc(&train_epoch_error, sizeof(float)));
 
   for (int epoch_num = 0; epoch_num < num_epochs; epoch_num++) {
     fprintf(stderr, "Running epoch %d\n", epoch_num);
 
-    SVDTrainKernel<<<blocks, threadsPerBlock, threadsPerBlock * sizeof(float)>>>
+    // Reset train_epoch_error
+    CUDA_CALL(cudaMemset(train_epoch_error, 0, sizeof(float)));
+
+    SVDTrainKernel<<<blocks, threadsPerBlock, (threadsPerBlock + 2 * svd->latent_factors) * sizeof(float)>>>
       (svd->latent_factors, svd->U, svd->V, svd->a, svd->b, svd->mu, svd->eta,
-        svd->reg, train, size, valid, valid_size, &train_epoch_error);
+        svd->reg, train, size, valid, valid_size, train_epoch_error);
+
+    cudaError err = cudaGetLastError();
+    if  (cudaSuccess != err){
+      fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
+    } else {
+      fprintf(stderr, "No kernel error detected\n");
+    }
 
     // Wait for the kernel to complete
-    cudaDeviceSynchronize();
+    CUDA_CALL(cudaDeviceSynchronize());
 
-    fprintf(stderr, "Training error in epoch: %f\n", train_epoch_error / size);
+    float* curr_error = (float*) malloc(sizeof(float));
+    CUDA_CALL(cudaMemcpy(curr_error, train_epoch_error, sizeof(float), cudaMemcpyDeviceToHost));
+
+    fprintf(stderr, "Training error in epoch: %f\n", *curr_error / size);
+
+    free(curr_error);
   }
+
+  CUDA_CALL(cudaFree(train_epoch_error));
 }
