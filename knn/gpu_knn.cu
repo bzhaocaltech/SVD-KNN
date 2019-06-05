@@ -1,4 +1,4 @@
-#include "helper_cuda.h"
+#include "../helper_cuda.h"
 #include "gpu_knn.cuh"
 
 #include <thrust/device_ptr.h>
@@ -171,8 +171,11 @@ float gpu_knn_predict_one(
     }
   }
 
-  delete neighbors;
+  CUDA_CALL( cudaFree(d_point));
+  CUDA_CALL( cudaFree(d_training_set));
+  CUDA_CALL( cudaFree(d_neighbors));
 
+  delete neighbors;
   delete class_counts;
 
   return max_class;
