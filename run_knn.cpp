@@ -6,9 +6,13 @@
 #include <assert.h>
 #include <chrono>
 #include <iostream>
-#include "knn/knn.hpp"
 
-void read_data(float **training_set, std::fstream *file_fstream);
+#include "knn/knn.hpp"
+#include "knn/gpu_knn.cuh"
+
+#define IDX2C(i, j, ld) ((i * ld) + j)
+
+int read_data(float **training_set, std::fstream *file_fstream, int num_lines);
 
 int main() {
   /****************************************************************************
@@ -30,8 +34,8 @@ int main() {
   // Read data into std::vector
   fprintf(stderr, "Loading training_data.csv");
   float ** training_set = new float *[num_training_points];
-  read_data(training_set, &input_stream);
-  fprintf(stderr, "\n");
+  int num_training_points_read = read_data(training_set, &input_stream, num_training_points);
+  fprintf(stderr, "\nLoaded %d points.\n", num_training_points_read);
 
   // Close the files
   input_stream.close();
@@ -46,18 +50,18 @@ int main() {
   int num_test_points = 1000;
   fprintf(stderr, "Loading test_data.csv");
   float **test_set = new float *[num_test_points];
-  read_data(test_set, &input_stream2);
-  fprintf(stderr, "\n");
+  int num_test_points_read = read_data(test_set, &input_stream2, num_test_points);
+  fprintf(stderr, "\nLoaded %d points.\n", num_test_points_read);
 
   input_stream2.close();
 
   /****************************************************************************
    * Running model                                                            *
-  *****************************************************************************/
+   ****************************************************************************/
 
   auto start_time = std::chrono::high_resolution_clock::now();
 
-  fprintf(stderr, "Predicting on test set");
+  fprintf(stderr, "CPU Predicting on test set");
   float *res = knn->predict_many(test_set, num_test_points);
   float hits = 0;
   for (int i = 0; i < num_test_points; i++) {
@@ -66,7 +70,7 @@ int main() {
     }
   }
   fprintf(stderr, "\n");
-
+  
   std::cerr << "Accuracy: " << hits / num_test_points << std::endl;
 
   auto end_time = std::chrono::high_resolution_clock::now();
@@ -76,32 +80,64 @@ int main() {
 
   std::cerr << "Time taken: " << duration.count() << " milliseconds" << std::endl;
 
+  // Flatten the array for the GPU KNN.
+  float *flat_training_set = new float[num_training_points * point_size];
+  for (int i = 0; i < num_training_points; i++) {
+    for (int j = 0; j < point_size; j++) {
+      flat_training_set[IDX2C(i, j, point_size)] = training_set[i][j];
+    }
+  }
+
+  float *flat_test_set = new float[num_test_points * point_size];
+  for (int i = 0; i < num_test_points; i++) {
+    for (int j = 0; j < point_size; j++) {
+      flat_test_set[IDX2C(i, j, point_size)] = test_set[i][j];
+    }
+  }
+
+  auto GPUstart_time = std::chrono::high_resolution_clock::now();
+
+  fprintf(stderr, "GPU Predicting on test set");
+  float *predictions = gpu_knn_predict_many(200, 512,
+    flat_test_set, num_test_points,
+    flat_training_set, num_training_points,
+    point_size, num_neighbors, num_classes);
+  float GPUhits = 0;
+  for (int i = 0; i < num_test_points; i++) {
+    if (predictions[i] != test_set[i][0]) {
+      GPUhits++;
+    }
+  }
+  fprintf(stderr, "\n");
+
+  std::cerr << "Accuracy: " << hits / num_test_points << std::endl;
+
+  auto GPUend_time = std::chrono::high_resolution_clock::now();
+
+  auto GPUduration =
+      std::chrono::duration_cast<std::chrono::milliseconds>(GPUend_time - GPUstart_time);
+
+  std::cerr << "Time taken: " << GPUduration.count() << " milliseconds" << std::endl;
+
   /****************************************************************************
    * Freeing model                                                            *
   *****************************************************************************/
 
   // Free the dataset
-  for (int i = 0; i < num_training_points; i++) {
-    free(training_set[i]);
-  }
+  delete training_set;
+  delete flat_training_set;
 
-  free(training_set);
-
-  for (int i = 0; i < num_test_points; i++) {
-    free(test_set[i]);
-  }
-
-  free(test_set);
+  delete test_set;
+  delete flat_test_set;
 
   return 0;
 }
 
 // Load data from given fstream into vector
-void read_data(float **training_set, std::fstream *file_fstream) {
+int read_data(float **training_set, std::fstream *file_fstream, int num_lines) {
   std::string line;
   int line_num = 0;
-  while (getline(*file_fstream, line))
-  {
+  while (getline(*file_fstream, line) && line_num < num_lines) {
     // Print out a dot occasionally so that we know it's actually doing
     // something and not broken
     if (line_num % 100000 == 0)
@@ -120,4 +156,6 @@ void read_data(float **training_set, std::fstream *file_fstream) {
 
     line_num++;
   }
+
+  return line_num;
 }

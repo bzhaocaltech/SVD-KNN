@@ -1,12 +1,14 @@
 # Makefile based off of CS 179 lab assignments
 
 # Product Names
-CUDA_OBJ = cuda.o
+SVD_CUDA_OBJ = svd_cuda.o
+KNN_CUDA_OBJ = knn_cuda.o
 
 # Input Names
 SVD_CUDA_FILES = svd/gpu_svd.cu
 SVD_CPP_FILES = run_svd.cpp svd/svd.cpp
 
+KNN_CUDA_FILES = knn/gpu_knn.cu
 KNN_CPP_FILES = run_knn.cpp knn/knn.cpp
 
 # CUDA Compiler and Flags
@@ -37,6 +39,7 @@ NVCC_GENCODES = -gencode arch=compute_30,code=sm_30 \
 
 # CUDA Object Files
 SVD_CUDA_OBJ_FILES = $(notdir $(addsuffix .o, $(SVD_CUDA_FILES)))
+KNN_CUDA_OBJ_FILES = $(notdir $(addsuffix .o, $(KNN_CUDA_FILES)))
 
 # ------------------------------------------------------------------------------
 
@@ -55,10 +58,10 @@ OBJ_KNN = $(notdir $(addsuffix .o, $(KNN_CPP_FILES)))
 
 all: run_svd run_knn
 
-run_knn: $(OBJ_KNN)
+run_svd: $(OBJ_SVD) $(SVD_CUDA_OBJ) $(SVD_CUDA_OBJ_FILES)
 	$(GPP) $(FLAGS) -o $@ $(INCLUDE) $^ $(LIBS)
 
-run_svd: $(OBJ_SVD) $(CUDA_OBJ) $(SVD_CUDA_OBJ_FILES)
+run_knn: $(OBJ_KNN) $(KNN_CUDA_OBJ) $(KNN_CUDA_OBJ_FILES)
 	$(GPP) $(FLAGS) -o $@ $(INCLUDE) $^ $(LIBS)
 
 # Compile C++ Source Files
@@ -78,10 +81,16 @@ run_knn.cpp.o: run_knn.cpp
 %_svd.cu.o: svd/%_svd.cu
 	$(NVCC) $(NVCC_FLAGS) $(NVCC_GENCODES) -c -o $@ $(NVCC_INCLUDE) $<
 
-cuda: $(SVD_CUDA_OBJ_FILES) $(CUDA_OBJ)
+%_knn.cu.o: knn/%_knn.cu
+	$(NVCC) $(NVCC_FLAGS) $(NVCC_GENCODES) -c -o $@ $(NVCC_INCLUDE) $<
+
+cuda: $(SVD_CUDA_OBJ) $(KNN_CUDA_OBJ)
 
 # Make linked device code
-$(CUDA_OBJ): $(SVD_CUDA_OBJ_FILES)
+$(SVD_CUDA_OBJ): $(SVD_CUDA_OBJ_FILES)
+	$(NVCC) $(CUDA_LINK_FLAGS) $(NVCC_GENCODES) -o $@ $(NVCC_INCLUDE) $^
+
+$(KNN_CUDA_OBJ): $(KNN_CUDA_OBJ_FILES)
 	$(NVCC) $(CUDA_LINK_FLAGS) $(NVCC_GENCODES) -o $@ $(NVCC_INCLUDE) $^
 
 clean:
