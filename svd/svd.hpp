@@ -47,7 +47,8 @@ class SVD {
     float predict_one(int x, int y);
 
   public:
-    /* Constructor for SVD */
+    /* Constructor for SVD. len_x and len_y are the lengths of U and V,
+     * respectively. */
     SVD(int latent_factors, float eta, float reg, int len_x, int len_y);
 
     /* Train on a dataset. Each element of the input array has 3 elements.
