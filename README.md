@@ -60,12 +60,48 @@ from U and V multiple times (instead of just once like for the prediction),
 the shared memory also contains space to copy down rows of U and V.
 
 Also note that the training method of the GPU code uses Hogwild. Hogwild algorithms
-ignores race conditions, locks, and the like. Despite this, it has seem great
+ignores race conditions, locks, and the like. Despite this, it has seen great
 success in a number of machine learning algorithms. However, because we are
 ignoring race conditions in the GPU code, the GPU code produces less accurate
 results than the CPU code. That being said, the fact that the gpu code is soooo
 much faster per epoch more than makes up (in my opinion)
 for any slight increase in the error per epoch.
+
+Furthermore, note that if latent_factors is set too high, the device memory will
+run out. The highest I managed to get successfully was 500 latent_factors.
+
+### Some sample ./run_svd calls that worked alright (didn't take too long or overfill memory):
+
+./run_svd 64 64 100 0.001 0.004 10 0
+GPU:
+Training error in epoch: 0.863725
+Validation error in epoch: 5.130097
+Time taken for GPU: 38554 milliseconds
+
+./run_svd 64 64 100 0.001 0.04 10 0
+GPU:
+Training error in epoch: 0.866645
+Validation error in epoch: 0.876778
+Time taken for GPU: 38182 milliseconds
+
+./run_svd 250 64 500 0.001 0.04 10 0
+GPU:
+Training error in epoch: 0.880769
+Validation error in epoch: 0.903402
+Time taken for GPU: 30688 milliseconds
+
+./run_svd 64 64 10 0.001 0.01 2 1
+CPU:
+Training error for epoch: 0.646374
+Validation error for epoch: 0.903483
+Time taken for CPU: 125727 milliseconds
+
+GPU:
+Training error in epoch: 0.868702
+Validation error in epoch: 0.867563
+Time taken for GPU: 5988 milliseconds
+
+Mean squared average difference between CPU and GPU was 0.051991
 
 ## KNN Implementation
 
