@@ -1,6 +1,6 @@
 # SVD and KNN CPU and GPU Implementations
 
-# SVD Implementation
+# SVD
 
 ## Overview
 
@@ -72,6 +72,7 @@ run out. The highest I managed to get successfully was 500 latent_factors.
 
 ### Some sample ./run_svd calls that worked alright (didn't take too long or overfill memory):
 
+```
 ./run_svd 64 64 100 0.001 0.004 10 0
 GPU:
 Training error in epoch: 0.863725
@@ -102,10 +103,46 @@ Validation error in epoch: 0.867563
 Time taken for GPU: 5988 milliseconds
 
 Mean squared average difference between CPU and GPU was 0.051991
+```
 
-## KNN Implementation
 
-## CPU Implementations
+# KNN
+
+## Notes
+The accuracy of the GPU is non-deterministic because there is no way to atomically get the minimum neighbors. This is because we compare on minimum distances, but we store the indices we find that minimum at.
+
+## Motivation
+The motivation for GPU accerlating the `k`-nearest neighbors algorithm (KNN),
+is that KNN is a very widespread and useful machine learning algorithm. KNN is
+math heavy, but is very parallelizable, and thus was chosen for this project.
+
+## High Level Algorithm Overview
+`k`-nearest neighbors is an inherently simple algorithm. Data points are
+classified by their proximity or similarity to other known points. In the case
+of this KNN, similarity is euclidian distance.
+
+For a given set of training data and a point `p` we would like to classify using
+that data, all the distances are calculated between `p` and each point
+in the training data. The `k` closest points to `p` are used to then classify
+`p`. In the case of this KNN implementation, the most common classification of
+the neighbors is used to classify `p`.
+
+## GPU Optimizations and Specifics
+The primary GPU optimization that was used to speed up KNN was a reduction to
+parallelize finding the closest neighbors. Instead of calculating the euclidian
+distances one at a time, all the distances are parallelized and the minimums of
+those distances compared using a reduction. Each thread in a block is given
+`k` spaces to maintain what it has found to be its `k`-nearest neighbors, and
+this solution is collapsed until the first `k` elements in shared memory are
+the nearest neighbors for the whole block.
+
+## Code Structure
+The files critical to this KNN implementation are mostly found in the `knn` folder. `knn.cpp` and `knn.hpp` are the CPU implementations and `gpu_knn.cu` and `gpu_knn.cuh` are the GPU implementations which uses `helper_cuda.h` that was given in previous labs.
+
+The main test script that demos the library is found in the root folder: `run_knn.cpp`.
+
+## Instructions
+
 To run KNN, first make sure you have a `data` directory in the root folder.
 Then, run `create_test_data.py`. If you wish to generate new data, make sure to
 manually delete old data before running the creation script again.
@@ -117,16 +154,44 @@ file.
 The generated KNN data has the following form. Each row represents a data point:
 [`class`, `x_0`, `x_1`]
 
-The SVD algorithm takes as a training set a sparse matrix. The sparse matrix
-is represented by a float**. The leading dimension is the number of data points
-while the each individual float* array takes the form (x_index, y_index, value).
-The SVD algorithm uses gradient descent to generate two matrices of latent
-factors that are used to predict the value of other points given a x_index and
-y_index.
+Using the library outside of the demo script would be as follows:
 
-The executable `./run_svd` runs the SVD algorithm on a dataset found in the data
-directory. The dataset comes from https://www.kaggle.com/netflix-inc/netflix-prize-data/downloads/netflix-prize-data.zip/1. To make the executable, run `make run_svd`
+The library header `gpu_knn.cuh` would be included in a project, exposing two functions:
+`gpu_knn_predict_one` and `gpu_knn_predict_many`
 
+The arguments to `gpu_knn_predict_one` are as follows:
+* `const unsigned num_blocks` - the number of GPU blocks to use.
+* `const unsigned num_threads_per_block` - the number of threads to use per GPU block.
+* `float *point` - the point to predict. Has the form [`class`, `x_0`, `x_1`, ..., `x_n`]. Class is ignored and can be any value, but needs to be there as padding so it has the exact same size as points in the training set.
+* `float *training_set` - a flattened matrix of points used for predictions. Each row represents a point and has the same form as the point to predict.
+* `int num_points` - the number of training points.
+* `int point_size` - the length of a point, including the classification.
+* `int num_neighbors` - the number of nearest neighbors to look for.
+* `int num_classes` - the maximum possible number of classifications. Must be higher than any classification found in the training data.
 
-## GPU Implementations
-Work in progress.
+The arguments to `gpu_knn_predict_many` are similar:
+* `const unsigned num_blocks` - the number of GPU blocks to use.
+* `const unsigned num_threads_per_block` - the number of threads to use per GPU block.
+* `float *predict_point` - a flattened matrix of points to predict. Each point has the form [`class`, `x_0`, `x_1`, ..., `x_n`]. Class is ignored and can be any value, but needs to be there as padding so it has the exact same size as points in the training set.
+* `int num_predict_points` - the number of points in the `predict_points` matrix.
+* `float *training_set` - a flattened matrix of points used for predictions. Each row represents a point and has the same form as the point to predict.
+* `int num_training_points` - the number of training points.
+* `int point_size` - the length of a point, including the classification.
+* `int num_neighbors` - the number of nearest neighbors to look for.
+* `int num_classes` - the maximum possible number of classifications. Must be higher than any classification found in the training data.
+
+## Example Code Output
+```
+mhuynh@titan:~/SVD-KNN$ ./run_knn 
+Loading data...
+Loading training_data.csv.
+Loaded 100000 points.
+Loading test_data.csv.
+Loaded 1000 points.
+CPU Predicting on test set..................................................
+Accuracy: 0.81
+Time taken: 4504 milliseconds
+GPU Predicting on test set
+Accuracy: 0.826
+Time taken: 1124 milliseconds
+```

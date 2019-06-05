@@ -26,7 +26,7 @@ int main() {
   // Open files. Data is in data/training_data.csv
   input_stream.open("data/training_data.csv", std::ios::in | std::ios::binary);
 
-  int num_training_points = 10e5;
+  int num_training_points = 10e4;
   int point_size = 3;
   int num_neighbors = 5;
   int num_classes = 10;
@@ -110,7 +110,7 @@ int main() {
   }
   fprintf(stderr, "\n");
 
-  std::cerr << "Accuracy: " << hits / num_test_points << std::endl;
+  std::cerr << "Accuracy: " << GPUhits / num_test_points << std::endl;
 
   auto GPUend_time = std::chrono::high_resolution_clock::now();
 
