@@ -51,15 +51,17 @@ class SVD {
     SVD(int latent_factors, float eta, float reg, int len_x, int len_y);
 
     /* Train on a dataset. Each element of the input array has 3 elements.
-     * (x, y, val). Note that x and y are technically ints. Includes optional
+     * (x, y, val). So the length of the train is 3 * size.
+     * Note that x and y are technically ints. Includes optional
      * argument for validation set */
-    void train(float** train, int size, int num_epochs,
-      float** valid = NULL, int valid_size = 0);
+    void train(float* train, int size, int num_epochs,
+      float* valid = NULL, int valid_size = 0);
 
     /* Predicts the values of a dataset. Each element of the input array has
-     * 2 elements (x, y). Returns the predicted values in the order that they
-     * were inserted. Note that x and y are technically ints */
-    float* predict(float** test, int size);
+     * 2 elements (x, y). So the length of test is 2 * size. Returns the
+     * predicted values in the order that they were inserted. Note that x and y
+     * are technically ints */
+    float* predict(float* test, int size);
 
     ~SVD();
 };
