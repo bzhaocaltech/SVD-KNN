@@ -15,7 +15,32 @@ void read_data_into_vector(std::vector<int*>* train_vec,
   std::vector<int*>* valid_vec, std::fstream* file_fstream);
 void read_vector_into_array(float* arr, std::vector<int*>* vec);
 
-int main() {
+int main(int argc, char *argv[]) {
+
+  /****************************************************************************
+   * PARSE ARGUMENTS                                                          *
+  *****************************************************************************/
+
+  if (argc != 8) {
+    printf("Usage: ./run_svd [blocks] [threads/block] [latent_factors] [eta] [reg] [num_epochs] [use_cpu (0 for no cpu 1 for cpu)]\n");
+    return 1;
+  }
+
+  int blocks = std::stoi(argv[1]);
+  int threadsPerBlock = std::stoi(argv[2]);
+
+  int num_epochs = std::stoi(argv[6]);
+  int latent_factors = std::stoi(argv[3]);
+  float eta = std::stof(argv[4]);
+  float reg = std::stof(argv[5]);
+  int temp = std::stoi(argv[7]);
+  bool use_cpu = temp == 1 ? true : false;
+
+  fprintf(stderr, "Using %d latent_factors with eta %f, reg %f, and %d epochs\n",
+    latent_factors, eta, reg, num_epochs);
+  fprintf(stderr, "Has %d blocks with %d threads per block\n", blocks,
+    threadsPerBlock);
+
   /****************************************************************************
    * LOADING DATA                                                             *
   *****************************************************************************/
@@ -79,22 +104,21 @@ int main() {
   // This is from data/README
   int num_movies = 17770;
   int num_users = 2649429;
-  int num_epochs = 2;
-  int latent_factors = 10;
-  float eta = 0.001;
-  float reg = 0.0005;
 
-  // auto start_time = std::chrono::high_resolution_clock::now();
-  //
-  // SVD* svd = new SVD(latent_factors, eta, reg, num_movies, num_users);
-  // svd->train(train_set, num_train_points, num_epochs, valid_set, num_valid_points);
-  //
-  // auto end_time = std::chrono::high_resolution_clock::now();
-  //
-  // auto duration =
-  //   std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-  //
-  // std::cerr << "Time taken: " << duration.count() << " milliseconds" << std::endl;
+  if (use_cpu) {
+    SVD* svd = new SVD(latent_factors, eta, reg, num_movies, num_users);
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    svd->train(train_set, num_train_points, num_epochs, valid_set, num_valid_points);
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+
+    auto duration =
+      std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+
+    std::cerr << "Time taken for CPU: " << duration.count() << " milliseconds" << std::endl;
+  }
 
   /****************************************************************************
    * Running GPU code                                                         *
@@ -113,8 +137,18 @@ int main() {
     3 * num_valid_points * sizeof(float), cudaMemcpyHostToDevice));
 
   GPU_SVD* gpu_svd = createGPUSVD(latent_factors, eta, reg, num_movies, num_users);
-  callSVDTrainKernel(64, 32, gpu_svd, dev_train_set, num_train_points, num_epochs,
-    dev_valid_set, num_valid_points);
+
+  auto start_time = std::chrono::high_resolution_clock::now();
+
+  callSVDTrainKernel(blocks, threadsPerBlock, gpu_svd, dev_train_set,
+    num_train_points, num_epochs, dev_valid_set, num_valid_points);
+
+  auto end_time = std::chrono::high_resolution_clock::now();
+
+  auto duration =
+    std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+
+  std::cerr << "Time taken for GPU: " << duration.count() << " milliseconds" << std::endl;
 
   freeGPUSVD(gpu_svd);
 

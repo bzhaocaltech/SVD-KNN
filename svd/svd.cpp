@@ -100,15 +100,15 @@ void SVD::train(float* train, int size, int num_epochs,
       total_error += error * error;
 
       // Adjust a
-      a[x] -= eta * (error - reg * a[x]);
+      a[x] -= eta * (error + reg * a[x]);
       // Adjust b
-      b[y] -= eta * (error - reg * b[y]);
+      b[y] -= eta * (error + reg * b[y]);
       // Adjust mu
-      mu -= eta * (error - reg * mu);
+      mu -= eta * (error + reg * mu);
       // Adjust U and V
       for (int j = 0; j < latent_factors; j++) {
-        float u_grad = eta * (error * get_v_val(y, j) - reg * get_u_val(x, j));
-        float v_grad = eta * (error * get_u_val(x, j) - reg * get_v_val(y, j));
+        float u_grad = eta * (error * get_v_val(y, j) + reg * get_u_val(x, j));
+        float v_grad = eta * (error * get_u_val(x, j) + reg * get_v_val(y, j));
 
         set_u_val(x, j, get_u_val(x, j) - u_grad);
         set_v_val(y, j, get_v_val(y, j) - v_grad);
@@ -132,10 +132,10 @@ void SVD::train(float* train, int size, int num_epochs,
   }
 }
 
-float* SVD::predict(float** test, int size) {
+float* SVD::predict(float* test, int size) {
   float* predictions = new float[size];
-  for (int i = 0; i < size; i++) {
-    predictions[i] = predict_one(test[i][0], test[i][1]);
+  for (int i = 0; i < size * 2; i++) {
+    predictions[i] = predict_one(test[2 * i], test[2 * i + 1]);
   }
   return predictions;
 }

@@ -76,7 +76,7 @@ __global__ void SVDTrainKernel(int latent_factors, float* U, float* V, float* a,
   // Each individual block deals with a single training example. Train_index is
   // the current index of train being processed by this block.
   uint train_index = blockIdx.x * 3;
-  while (train_index < size) {
+  while (train_index < size * 3) {
     // Extract out necessary variables from the training data
     int x = train[train_index];
     int y = train[train_index + 1];
@@ -169,7 +169,6 @@ __global__ void SVDTrainKernel(int latent_factors, float* U, float* V, float* a,
 
   // Have only a single thread per block report the error in the block
   if (threadIdx.x == 0) {
-    printf("%f\n", total_error);
     atomicAdd(train_epoch_error, total_error);
   }
 }
