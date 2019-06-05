@@ -13,7 +13,7 @@
 
 void read_data_into_vector(std::vector<int*>* train_vec,
   std::vector<int*>* valid_vec, std::fstream* file_fstream);
-void read_vector_into_array(float* arr, std::vector<int*>* vec);
+void read_vector_into_array(float* arr, float* arr2, std::vector<int*>* vec);
 
 int main(int argc, char *argv[]) {
 
@@ -86,12 +86,14 @@ int main(int argc, char *argv[]) {
   // Each point has 3 dimensions (x_index, y_index, value) where x_index and
   // y_index are positions in the matrix
   float* train_set = (float*) malloc(sizeof(float) * num_train_points * 3);
-  float* valid_set =(float*) malloc(sizeof(float) * num_valid_points * 3);
+  float* valid_set = (float*) malloc(sizeof(float) * num_valid_points * 3);
+  // This set lacks the third dimension and will be useful when testing the code
+  float* test_set = (float*) malloc(sizeof(float) * num_valid_points * 2);
   fprintf(stderr, "There are %d points in the training set\n", num_train_points);
   fprintf(stderr, "There are %d points in the validation set\n", num_valid_points);
   fprintf(stderr, "Converting from vector to array");
-  read_vector_into_array(train_set, train_vec);
-  read_vector_into_array(valid_set, valid_vec);
+  read_vector_into_array(train_set, NULL, train_vec);
+  read_vector_into_array(valid_set, test_set, valid_vec);
   fprintf(stderr, "\n");
   free(train_vec);
   free(valid_vec);
@@ -105,9 +107,8 @@ int main(int argc, char *argv[]) {
   int num_movies = 17770;
   int num_users = 2649429;
 
+  SVD* svd = new SVD(latent_factors, eta, reg, num_movies, num_users);
   if (use_cpu) {
-    SVD* svd = new SVD(latent_factors, eta, reg, num_movies, num_users);
-
     auto start_time = std::chrono::high_resolution_clock::now();
 
     svd->train(train_set, num_train_points, num_epochs, valid_set, num_valid_points);
@@ -131,13 +132,17 @@ int main(int argc, char *argv[]) {
   // Copy the training and validation sets onto device memory
   float* dev_train_set;
   float* dev_valid_set;
+  float* dev_test_set;
 
   CUDA_CALL(cudaMalloc(&dev_train_set, 3 * num_train_points * sizeof(float)));
   CUDA_CALL(cudaMalloc(&dev_valid_set, 3 * num_valid_points * sizeof(float)));
+  CUDA_CALL(cudaMalloc(&dev_test_set, 2 * num_valid_points * sizeof(float)));
   CUDA_CALL(cudaMemcpy(dev_train_set, train_set,
     3 * num_train_points * sizeof(float), cudaMemcpyHostToDevice));
   CUDA_CALL(cudaMemcpy(dev_valid_set, valid_set,
     3 * num_valid_points * sizeof(float), cudaMemcpyHostToDevice));
+  CUDA_CALL(cudaMemcpy(dev_test_set, test_set,
+    2 * num_valid_points * sizeof(float), cudaMemcpyHostToDevice));
 
   GPU_SVD* gpu_svd = createGPUSVD(latent_factors, eta, reg, num_movies, num_users);
 
@@ -153,17 +158,47 @@ int main(int argc, char *argv[]) {
 
   std::cerr << "Time taken for GPU: " << duration.count() << " milliseconds" << std::endl;
 
-  freeGPUSVD(gpu_svd);
+  /****************************************************************************
+   * Comparing the predictions of CPU and GPU                                 *
+   ****************************************************************************/
+   if (use_cpu) {
+     fprintf(stderr, "Comparing predictions of CPU and GPU on valid set\n");
+     float* cpu_predictions = svd->predict(test_set, num_valid_points);
+     float* dev_predictions;
+     CUDA_CALL(cudaMalloc(&dev_predictions, num_valid_points * sizeof(float)));
+     callSVDPredictKernel(blocks, threadsPerBlock, gpu_svd, dev_test_set,
+       num_valid_points, dev_predictions);
+     float* cpu_dev_predictions = (float*) malloc(num_valid_points * sizeof(float));
+     CUDA_CALL(cudaMemcpy(cpu_dev_predictions, dev_predictions,
+       num_valid_points * sizeof(float), cudaMemcpyDeviceToHost));
+
+     float total_diff = 0;
+     for (int i = 0; i < num_valid_points; i++) {
+       float diff = cpu_predictions[i] - cpu_dev_predictions[i];
+       total_diff += diff * diff;
+     }
+
+     fprintf(stderr, "Mean squared average difference between CPU and GPU was %f\n",
+      total_diff / num_valid_points);
+
+     CUDA_CALL(cudaFree(dev_predictions));
+     free(cpu_dev_predictions);
+     free(cpu_predictions);
+   }
 
   /****************************************************************************
    * Free memory                                                              *
   *****************************************************************************/
 
   // Free the datasets (the vectors were freed earlier)
+  delete svd;
+  freeGPUSVD(gpu_svd);
   free(train_set);
   free(valid_set);
+  free(test_set);
   CUDA_CALL(cudaFree(dev_train_set));
   CUDA_CALL(cudaFree(dev_valid_set));
+  CUDA_CALL(cudaFree(dev_test_set));
 
   return 0;
 }
@@ -220,8 +255,9 @@ void read_data_into_vector(std::vector<int*>* train_vec,
   }
 }
 
-// Load data from given vector into float*. Also frees the vector
-void read_vector_into_array(float* arr, std::vector<int*>* vec) {
+// Load data from given vector into float*. Also frees the vector. The second
+// array is used to hold the vector's data but without the 3rd dimension
+void read_vector_into_array(float* arr, float* arr2, std::vector<int*>* vec) {
   for (unsigned int i = 0; i < vec->size(); i++) {
     // Print out a dot occasionally so that we know it's actually doing
     // something and not broken
@@ -232,6 +268,12 @@ void read_vector_into_array(float* arr, std::vector<int*>* vec) {
     arr[3 * i] = vec->at(i)[0];
     arr[3 * i + 1] = vec->at(i)[1];
     arr[3 * i + 2] = vec->at(i)[2];
+
+    if (arr2 != NULL) {
+      arr2[2 * i] = vec->at(i)[0];
+      arr2[2 * i + 1] = vec->at(i)[1];
+    }
+
     free(vec->at(i));
   }
 }

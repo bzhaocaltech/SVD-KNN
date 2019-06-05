@@ -106,14 +106,14 @@ __global__ void SVDTrainKernel(int latent_factors, float* U, float* V, float* a,
 
     // Now do a sum reduction to find the final dot product
     for (int i = blockDim.x / 2; i >= 1; i /= 2) {
-        if (threadIdx.x < i) {
-            float val_1 = shared[threadIdx.x];
-            float val_2 = shared[threadIdx.x + i];
-            float sum = val_1 + val_2;
-            shared[threadIdx.x] = sum;
-        }
-        // Sync the threads after each iteration
-        __syncthreads();
+      if (threadIdx.x < i) {
+        float val_1 = shared[threadIdx.x];
+        float val_2 = shared[threadIdx.x + i];
+        float sum = val_1 + val_2;
+        shared[threadIdx.x] = sum;
+      }
+      // Sync the threads after each iteration
+      __syncthreads();
     }
 
     // We can now add the biases to find the predicted value given by our
@@ -168,7 +168,7 @@ __global__ void SVDTrainKernel(int latent_factors, float* U, float* V, float* a,
   float valid_error = 0;
   uint valid_index = blockIdx.x * 3;
   while (valid_index < valid_size * 3) {
-    // Extract out necessary variables from the training data
+    // Extract out necessary variables from the validation data
     int x = valid[valid_index];
     int y = valid[valid_index + 1];
     float actual = valid[valid_index + 2];
@@ -177,15 +177,13 @@ __global__ void SVDTrainKernel(int latent_factors, float* U, float* V, float* a,
     int v_row = y * latent_factors;
 
     // Now get the predicted value at x, y. To do this, load up shared memory
-    // with part of the dot product. We can also use the loop to set up the
-    // parts of the shared memory which will just be copies of U and V
+    // with part of the dot product. No need to load U and V into shared memory
+    // since we are only going to use them once in this loop
     uint row_index = threadIdx.x;
     float dot_part = 0;
     while (row_index < latent_factors) {
       float uval = U[u_row + row_index];
       float vval = V[v_row + row_index];
-      shared[offsetUShared + row_index] = uval;
-      shared[offsetVShared + row_index] = vval;
       dot_part += uval * vval;
       row_index += blockDim.x;
     }
@@ -196,14 +194,14 @@ __global__ void SVDTrainKernel(int latent_factors, float* U, float* V, float* a,
 
     // Now do a sum reduction to find the final dot product
     for (int i = blockDim.x / 2; i >= 1; i /= 2) {
-        if (threadIdx.x < i) {
-            float val_1 = shared[threadIdx.x];
-            float val_2 = shared[threadIdx.x + i];
-            float sum = val_1 + val_2;
-            shared[threadIdx.x] = sum;
-        }
-        // Sync the threads after each iteration
-        __syncthreads();
+      if (threadIdx.x < i) {
+        float val_1 = shared[threadIdx.x];
+        float val_2 = shared[threadIdx.x + i];
+        float sum = val_1 + val_2;
+        shared[threadIdx.x] = sum;
+      }
+      // Sync the threads after each iteration
+      __syncthreads();
     }
 
     // We can now add the biases to find the predicted value given by our
@@ -255,7 +253,8 @@ void callSVDTrainKernel(unsigned int blocks, unsigned int threadsPerBlock,
     cudaError err = cudaGetLastError();
     if  (cudaSuccess != err){
       fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
-    } else {
+    }
+    else {
       fprintf(stderr, "No kernel error detected\n");
     }
 
@@ -277,4 +276,87 @@ void callSVDTrainKernel(unsigned int blocks, unsigned int threadsPerBlock,
 
   CUDA_CALL(cudaFree(train_epoch_error));
   CUDA_CALL(cudaFree(valid_epoch_error));
+}
+
+__global__ void SVDPredictKernel(int latent_factors, float* U, float* V, float* a,
+  float* b, float* mu, const float* test, unsigned int size,
+  float* predictions) {
+    // Used for dot product calculations
+    extern __shared__ float shared[];
+
+    uint test_index = blockIdx.x * 2;
+    while (test_index < size * 2) {
+      // Extract out necessary variables from the test data
+      int x = test[test_index];
+      int y = test[test_index + 1];
+      // Start of the latent_factor row for U and V
+      int u_row = x * latent_factors;
+      int v_row = y * latent_factors;
+
+      // Now get the predicted value at x, y. To do this, load up shared memory
+      // with part of the dot product.
+      uint row_index = threadIdx.x;
+      float dot_part = 0;
+      while (row_index < latent_factors) {
+        float uval = U[u_row + row_index];
+        float vval = V[v_row + row_index];
+        dot_part += uval * vval;
+      row_index += blockDim.x;
+    }
+    shared[threadIdx.x] = dot_part;
+
+    // After everything is loaded into shared memory, sync the threads
+    __syncthreads();
+
+    // Now do a sum reduction to find the final dot product
+    for (int i = blockDim.x / 2; i >= 1; i /= 2) {
+      if (threadIdx.x < i) {
+        float val_1 = shared[threadIdx.x];
+        float val_2 = shared[threadIdx.x + i];
+        float sum = val_1 + val_2;
+        shared[threadIdx.x] = sum;
+      }
+      // Sync the threads after each iteration
+      __syncthreads();
+    }
+
+    // We can now add the biases to find the predicted value given by our
+    // algorithm
+    float ax = a[x];
+    float by = b[y];
+    float m = *mu;
+    float predicted = shared[0] + ax + by + m;
+
+    // Only the first thread needs to add the value to predictions
+    if (threadIdx.x == 0) {
+      predictions[test_index / 2] = predicted;
+    }
+
+    // Move onto the next training sample
+    test_index += 2 * gridDim.x;
+
+    // The next loop will change shared memory, so make sure all threads are
+    // done before moving on
+    __syncthreads();
+  }
+}
+
+void callSVDPredictKernel(unsigned int blocks, unsigned int threadsPerBlock,
+  const GPU_SVD* svd, const float* test, unsigned int size,
+  float* predictions) {
+
+  SVDPredictKernel<<<blocks, threadsPerBlock, threadsPerBlock>>>
+    (svd->latent_factors, svd->U, svd->V, svd->a, svd->b, svd->mu, test, size,
+      predictions);
+
+  cudaError err = cudaGetLastError();
+  if (cudaSuccess != err){
+    fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
+  }
+  else {
+    fprintf(stderr, "No kernel error detected\n");
+  }
+
+  // Wait for the kernel to complete
+  CUDA_CALL(cudaDeviceSynchronize());
 }

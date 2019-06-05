@@ -134,8 +134,8 @@ void SVD::train(float* train, int size, int num_epochs,
 
 float* SVD::predict(float* test, int size) {
   float* predictions = new float[size];
-  for (int i = 0; i < size * 2; i++) {
-    predictions[i] = predict_one(test[2 * i], test[2 * i + 1]);
+  for (int i = 0; i < size * 2; i += 2) {
+    predictions[i / 2] = predict_one(test[i], test[i + 1]);
   }
   return predictions;
 }
@@ -143,4 +143,6 @@ float* SVD::predict(float* test, int size) {
 SVD::~SVD() {
   free(U);
   free(V);
+  free(a);
+  free(b);
 }

@@ -42,13 +42,19 @@ GPU_SVD* createGPUSVD(int latent_factors, float eta, float reg, int len_x,
 /* Frees a GPU_SVD struct created by createGPUSVD */
 void freeGPUSVD(GPU_SVD* svd);
 
-/* Kernel used to train the svd */
-__global__ void SVDTrainKernel(GPU_SVD* svd, float* train, int size,
-  int num_epochs, float* valid, int valid_size);
-
-/* Calls the kernel to train the svd */
+/* Calls the kernel to train the svd. The points stored in train and valid
+ * have 3 dimensions (x, y, value). size and valid_size are the number of
+ * points. So len(train) and len(valid) are size * 3 and valid_size * 2,
+ * respectively  */
 void callSVDTrainKernel(unsigned int blocks, unsigned int threadsPerBlock,
   GPU_SVD* svd, const float* train, int size, int num_epochs,
   const float* valid = NULL, int valid_size = 0);
+
+/* Calls the kernel to predict some points. The points stored in test have
+ * 2 dimensions (x, y). size is the number of points. So len(test) is size * 2.
+ * predictions is a device allocated array which will store the predictions.
+ * len(predictions) = size */
+void callSVDPredictKernel(unsigned int blocks, unsigned int threadsPerBlock,
+  const GPU_SVD* svd, const float* test, unsigned int size, float* predictions);
 
 #endif

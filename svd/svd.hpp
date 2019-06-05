@@ -51,7 +51,7 @@ class SVD {
     SVD(int latent_factors, float eta, float reg, int len_x, int len_y);
 
     /* Train on a dataset. Each element of the input array has 3 elements.
-     * (x, y, val). So the length of the training data is 3 * size.
+     * (x, y, val). So the length of the train is 3 * size.
      * Note that x and y are technically ints. Includes optional
      * argument for validation set */
     void train(float* train, int size, int num_epochs,
