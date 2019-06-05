@@ -119,6 +119,9 @@ int main(int argc, char *argv[]) {
 
     std::cerr << "Time taken for CPU: " << duration.count() << " milliseconds" << std::endl;
   }
+  else {
+    fprintf(stderr, "CPU code skipped because of command line args.\n");
+  }
 
   /****************************************************************************
    * Running GPU code                                                         *
